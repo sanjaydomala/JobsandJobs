@@ -1,11 +1,16 @@
 package com.jobs.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jobs.Data.JobsData;
 import com.jobs.repository.JobsRepository;
+import com.jobs.util.AppConstants;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -19,9 +24,10 @@ public class JobsService {
     @Autowired
     JobsRepository jobsRepository;
 
+    @Autowired
+    public KafkaTemplate<String, Object> kafkaTemplate;
+
     public JobsData addJobs(JobsData job) {
-        job.setId(UUID.randomUUID().toString());
-        logger.info("job id is :{}",UUID.randomUUID().toString());
         return jobsRepository.save(job);
     }
 
@@ -34,12 +40,10 @@ public class JobsService {
     }
 
     public JobsData updateJob(JobsData updatedJob) {
-        JobsData existingJob = jobsRepository.findById(updatedJob.getId()).get();
 
-        existingJob.setJobName(updatedJob.getJobName());
-        existingJob.setJobDescription(updatedJob.getJobDescription());
-        existingJob.setCategory(updatedJob.getCategory());
-        return existingJob;
+
+
+        return updatedJob;
     }
 
     public void deleteJob(String id) {
@@ -49,6 +53,24 @@ public class JobsService {
 
     public JobsData getJob(String id) {
         return jobsRepository.findById(id).get();
+    }
+
+    public String publishJob(JobsData jobsData)  {
+        ObjectMapper objectMapper = new ObjectMapper();
+        String jsonValue =  null;
+        try {
+            jsonValue = objectMapper.writeValueAsString(jobsData);
+        }
+        catch (JsonProcessingException jsonProcessingException){
+            jsonProcessingException.getMessage();
+        }
+        kafkaTemplate.send(AppConstants.POSTJOB,jsonValue);
+        return "published successfully";
+    }
+
+    @KafkaListener(topics = AppConstants.POSTJOB, groupId = "jobsgroup")
+    public void listen(String message) {
+        System.out.println("Received Message: " + message);
     }
 
     public List<JobsData> getJobsByCategory(String category){
